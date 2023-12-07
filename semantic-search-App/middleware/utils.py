@@ -18,6 +18,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENV = os.getenv("PINECONE_ENV")
 
+file_path = "/Users/suchi_bigmac/Documents/GEN-AI-Applications/semantic-search-App/middleware/output.txt"
 
 #create pinecone index
 async def createPineconeIndex(indexName, vectorDimensions):
@@ -61,12 +62,17 @@ def process_pdf(file_path):
 def create_embeddings(texts):
     try:
         embeddings_array = []
-        res = None
-        for text in texts:
+        res = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY).embed_documents(texts)
+        
+        
+        return res
+        '''for text in texts:
             text = re.sub(r'\n', ' ', text)
             res =  OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY).embed_documents(text)
             embeddings_array.append(res)
-        return embeddings_array
+        return embeddings_array'''
+
+        
     except Exception as e:
         err = "Error while creating embeddings: ", str(e)
         return err
@@ -91,12 +97,13 @@ async def updatePinecone(indexName, docs):
     
                         print("Processing document:", pdf_path)
                         chunks, documents = process_pdf(pdf_path)
-                        
-                        print(f"Calling OpenAI's embedding endpoint document with {len(chunks)} text chunks")
+
+                        print("creating embeddings for ", len(chunks), " chunks..")
                         embeddings = create_embeddings(chunks)
-                        for i in range(0, 1):
-                            print(embeddings[i])
-                        '''print(f"Creating {len(chunks)} vector array with id, values and metadata..")
+
+                           
+                        print(len(embeddings), " embeddings has been created")
+                        print(f"Creating {len(chunks)} vector array with id, values and metadata..")
                         batch = []
                         for idx in range(len(documents)):
                             chunk = documents[idx]
@@ -121,7 +128,7 @@ async def updatePinecone(indexName, docs):
                                     print("error while inserting: " + str(e))
 
                                 batch = []
-                        print("upsert of vectors in index completed successfully")'''
+                        print("upsert of vectors in index completed successfully")
                                   
         except Exception as e:
             return e
