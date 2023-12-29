@@ -2,6 +2,8 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.llms.openai import OpenAI
 from langchain.chains import RetrievalQAWithSourcesChain
+from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
 from langchain.document_loaders import PyPDFLoader
 from langchain.docstore import document
 import asyncio
@@ -77,9 +79,6 @@ def create_embeddings(texts):
         err = "Error while creating embeddings: ", str(e)
         return err
     
-
-
-
 #upload data to pinecone index - indexName and docs: path to document folder
 async def updatePinecone(indexName, docs):
     print("Entering updatePinecone function...")
@@ -137,11 +136,74 @@ async def updatePinecone(indexName, docs):
         err = "Error while updating Index: " + str(e)
         return err
 
+
+#Answering question over document using LLM
+async def queryPineconeVectorStoreandQueryLLM(indexName, question):
+    
+
+    print("intializing pinecone index.")
+    try:
+        pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+        index = pinecone.Index(indexName)
+    except Exception as e:
+        return("Error while initializing pinecone index: " + str(e))
+    
+    print("embeding question..: " + str(question))
+    try:
+        queryEmbeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY).embed_query(question)
+    except Exception as e:
+        return("Error while embedding question: " + str(e))
+    
+    print("getting revelant index related to the question from pinecone (query)...")
+    try:
+        queryResponse = index.query(
+            top_k= 10,
+            vector= queryEmbeddings,
+            include_metadata= True,
+            include_values= True
+        )
+
+        print(f"Found {len(queryResponse['matches'])} matches..")
+        
+    except Exception as e:
+        return("Error while quering pinecone index with question: " + str(e))
+    
+    
+    
+    print(f"Asking question: {question}")
+    try:
+        if len(queryResponse['matches']) != 0:
+            llm = OpenAI()
+            chain = load_qa_chain(llm, chain_type="stuff")
+            print("created llm chain...")
+            concatenated_page_content = " ".join(
+            [match['metadata']['page_content'] for match in queryResponse['matches']]
+            )   
+            documents = [
+                {"page_content": match['metadata']['page_content']}
+                for match in queryResponse['matches']
+            ]
+            
+
+            print("concated relavent pages..")
+            try:
+                result = chain.run(
+                    input_documents=queryResponse['matches'],
+                    question=question,
+                )
+
+                return result
+            except Exception as e:
+                return("Error while answering from LLM: ", str(e))
+    except Exception as e:
+        return("Error while running llm: ", str(e))
+    
+
+
+    
 async def main():
     
-    
-    
-    res = await updatePinecone('semantic-search-index',"/Users/suchi_bigmac/Documents/GEN-AI-Applications/semantic-search-App/middleware/documents/Specification/lenshub" )
+    res = await queryPineconeVectorStoreandQueryLLM('semantic-search-index',"What is initialize()?" )
     print(res)
 if __name__ == "__main__":
     asyncio.run(main())
